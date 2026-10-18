@@ -24,34 +24,56 @@ pub struct CreateOrderResponse {
     pub message: String,
 }
 
+fn get_id_str(row: &sqlx::postgres::PgRow) -> String {
+    if let Ok(s) = row.try_get::<String, _>("id") {
+        s
+    } else if let Ok(u) = row.try_get::<Uuid, _>("id") {
+        u.to_string()
+    } else {
+        Uuid::new_v4().to_string()
+    }
+}
+
+fn get_f64_val(row: &sqlx::postgres::PgRow, col: &str) -> f64 {
+    if let Ok(v) = row.try_get::<f64, _>(col) {
+        v
+    } else if let Ok(v) = row.try_get::<i64, _>(col) {
+        v as f64
+    } else if let Ok(v) = row.try_get::<i32, _>(col) {
+        v as f64
+    } else {
+        0.0
+    }
+}
+
 fn row_to_buyer_order(row: &sqlx::postgres::PgRow) -> BuyerOrder {
-    let id_uuid: Uuid = row.get("id");
-    let status_str: String = row.get("status");
+    let id_str = get_id_str(row);
+    let status_str: String = row.try_get("status").unwrap_or_else(|_| "PENDING".to_string());
     let status = match status_str.to_uppercase().as_str() {
         "APPROVED" => OrderStatus::Approved,
         "CONTACTED" => OrderStatus::Contacted,
         "REJECTED" => OrderStatus::Rejected,
         _ => OrderStatus::Pending,
     };
-    let items_val: serde_json::Value = row.get("items");
+    let items_val: serde_json::Value = row.try_get("items").unwrap_or(serde_json::Value::Array(vec![]));
     let items: Vec<OrderItem> = serde_json::from_value(items_val).unwrap_or_default();
-    let created_at: chrono::DateTime<Utc> = row.get("created_at");
+    let created_at: chrono::DateTime<Utc> = row.try_get("created_at").unwrap_or_else(|_| Utc::now());
 
     BuyerOrder {
-        id: id_uuid.to_string(),
-        order_code: row.get("order_code"),
-        buyer_name: row.get("buyer_name"),
-        company_name: row.get("company_name"),
-        email: row.get("email"),
-        whatsapp_number: row.get("whatsapp_number"),
-        destination_country: row.get("destination_country"),
-        destination_port: row.get("destination_port"),
-        incoterms: row.get("incoterms"),
+        id: id_str,
+        order_code: row.try_get("order_code").unwrap_or_default(),
+        buyer_name: row.try_get("buyer_name").unwrap_or_default(),
+        company_name: row.try_get("company_name").unwrap_or_default(),
+        email: row.try_get("email").unwrap_or_default(),
+        whatsapp_number: row.try_get("whatsapp_number").unwrap_or_default(),
+        destination_country: row.try_get("destination_country").unwrap_or_default(),
+        destination_port: row.try_get("destination_port").unwrap_or_default(),
+        incoterms: row.try_get("incoterms").unwrap_or_default(),
         items,
         status,
-        total_amount: row.get("total_amount"),
-        currency: row.get("currency"),
-        notes: row.get("notes"),
+        total_amount: get_f64_val(row, "total_amount"),
+        currency: row.try_get("currency").unwrap_or_else(|_| "USD".to_string()),
+        notes: row.try_get("notes").ok(),
         created_at: created_at.to_rfc3339(),
     }
 }

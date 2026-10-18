@@ -25,33 +25,55 @@ pub struct CreateSupplierResponse {
     pub message: String,
 }
 
+fn get_f64_val(row: &sqlx::postgres::PgRow, col: &str) -> f64 {
+    if let Ok(v) = row.try_get::<f64, _>(col) {
+        v
+    } else if let Ok(v) = row.try_get::<i64, _>(col) {
+        v as f64
+    } else if let Ok(v) = row.try_get::<i32, _>(col) {
+        v as f64
+    } else {
+        0.0
+    }
+}
+
+fn get_id_str(row: &sqlx::postgres::PgRow) -> String {
+    if let Ok(s) = row.try_get::<String, _>("id") {
+        s
+    } else if let Ok(u) = row.try_get::<Uuid, _>("id") {
+        u.to_string()
+    } else {
+        Uuid::new_v4().to_string()
+    }
+}
+
 fn row_to_supplier_request(row: &sqlx::postgres::PgRow) -> SupplierRequest {
-    let id_uuid: Uuid = row.get("id");
-    let status_str: String = row.get("status");
+    let id_str = get_id_str(row);
+    let status_str: String = row.try_get("status").unwrap_or_else(|_| "PENDING".to_string());
     let status = match status_str.to_uppercase().as_str() {
         "APPROVED" => SupplierRequestStatus::Approved,
         "CONTACTED" => SupplierRequestStatus::Contacted,
         "REJECTED" => SupplierRequestStatus::Rejected,
         _ => SupplierRequestStatus::Pending,
     };
-    let created_at: chrono::DateTime<Utc> = row.get("created_at");
+    let created_at: chrono::DateTime<Utc> = row.try_get("created_at").unwrap_or_else(|_| Utc::now());
 
     SupplierRequest {
-        id: id_uuid.to_string(),
-        req_code: row.get("req_code"),
-        supplier_name: row.get("supplier_name"),
-        group_or_cv_name: row.get("group_or_cv_name"),
-        location_regency: row.get("location_regency"),
-        location_province: row.get("location_province"),
-        whatsapp_number: row.get("whatsapp_number"),
-        commodity_category: row.get("commodity_category"),
-        commodity_name: row.get("commodity_name"),
-        qty_monthly_capacity: row.get("qty_monthly_capacity"),
-        unit: row.get("unit"),
-        moisture_or_grade: row.get("moisture_or_grade"),
-        offered_price_idr: row.get("offered_price_idr"),
-        readiness_status: row.get("readiness_status"),
-        notes: row.get("notes"),
+        id: id_str,
+        req_code: row.try_get("req_code").unwrap_or_default(),
+        supplier_name: row.try_get("supplier_name").unwrap_or_default(),
+        group_or_cv_name: row.try_get("group_or_cv_name").unwrap_or_default(),
+        location_regency: row.try_get("location_regency").unwrap_or_default(),
+        location_province: row.try_get("location_province").unwrap_or_default(),
+        whatsapp_number: row.try_get("whatsapp_number").unwrap_or_default(),
+        commodity_category: row.try_get("commodity_category").unwrap_or_default(),
+        commodity_name: row.try_get("commodity_name").unwrap_or_default(),
+        qty_monthly_capacity: get_f64_val(row, "qty_monthly_capacity"),
+        unit: row.try_get("unit").unwrap_or_else(|_| "Ton".to_string()),
+        moisture_or_grade: row.try_get("moisture_or_grade").unwrap_or_default(),
+        offered_price_idr: get_f64_val(row, "offered_price_idr"),
+        readiness_status: row.try_get("readiness_status").unwrap_or_else(|_| "Ready Stock".to_string()),
+        notes: row.try_get("notes").ok(),
         status,
         created_at: created_at.to_rfc3339(),
     }
@@ -78,17 +100,19 @@ pub async fn create_supplier_request(
 
     let year = Utc::now().format("%Y").to_string();
     let req_code = format!("SUP-MEPC-{}-{:04}", year, count + 1);
+    let new_id = format!("sup-{}", Uuid::new_v4());
 
     let row = sqlx::query(
         r#"
         INSERT INTO supplier_requests (
-            req_code, supplier_name, group_or_cv_name, location_regency, location_province,
+            id, req_code, supplier_name, group_or_cv_name, location_regency, location_province,
             whatsapp_number, commodity_category, commodity_name, qty_monthly_capacity, unit,
-            moisture_or_grade, offered_price_idr, readiness_status, notes, status, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'PENDING', NOW(), NOW())
+            moisture_or_grade, offered_price_idr, readiness_status, notes, status, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'PENDING', NOW())
         RETURNING *
         "#,
     )
+    .bind(&new_id)
     .bind(&req_code)
     .bind(&payload.supplier_name)
     .bind(&payload.group_or_cv_name)
@@ -143,8 +167,7 @@ pub async fn update_supplier_status(
         r#"
         UPDATE supplier_requests
         SET status = $1,
-            offered_price_idr = COALESCE($2, offered_price_idr),
-            updated_at = NOW()
+            offered_price_idr = COALESCE($2, offered_price_idr)
         WHERE id::text = $3 OR req_code = $3
         RETURNING *
         "#,
@@ -154,7 +177,10 @@ pub async fn update_supplier_status(
     .bind(&id)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|e| {
+        tracing::error!("Failed to update supplier status: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     match row {
         Some(r) => Ok(Json(row_to_supplier_request(&r))),

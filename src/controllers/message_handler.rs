@@ -12,32 +12,42 @@ use crate::{
     services::AppState,
 };
 
+fn get_id_str(row: &sqlx::postgres::PgRow) -> String {
+    if let Ok(s) = row.try_get::<String, _>("id") {
+        s
+    } else if let Ok(u) = row.try_get::<Uuid, _>("id") {
+        u.to_string()
+    } else {
+        Uuid::new_v4().to_string()
+    }
+}
+
 fn row_to_message(row: &sqlx::postgres::PgRow) -> AdminMessage {
-    let id_uuid: Uuid = row.get("id");
-    let chan_str: String = row.get("channel");
+    let id_str = get_id_str(row);
+    let chan_str: String = row.try_get("channel").unwrap_or_else(|_| "WEB_INQUIRY".to_string());
     let channel = match chan_str.to_uppercase().as_str() {
         "WHATSAPP" => MessageChannel::WhatsApp,
         "EMAIL" => MessageChannel::Email,
         _ => MessageChannel::WebInquiry,
     };
-    let status_str: String = row.get("status");
+    let status_str: String = row.try_get("status").unwrap_or_else(|_| "UNREAD".to_string());
     let status = match status_str.to_uppercase().as_str() {
         "READ" => MessageStatus::Read,
         "REPLIED" => MessageStatus::Replied,
         _ => MessageStatus::Unread,
     };
-    let created_at: chrono::DateTime<Utc> = row.get("created_at");
+    let created_at: chrono::DateTime<Utc> = row.try_get("created_at").unwrap_or_else(|_| Utc::now());
 
     AdminMessage {
-        id: id_uuid.to_string(),
-        sender_name: row.get("sender_name"),
-        sender_company: row.get("sender_company"),
-        sender_phone: row.get("sender_phone"),
-        sender_email: row.get("sender_email"),
+        id: id_str,
+        sender_name: row.try_get("sender_name").unwrap_or_default(),
+        sender_company: row.try_get("sender_company").unwrap_or_default(),
+        sender_phone: row.try_get("sender_phone").unwrap_or_default(),
+        sender_email: row.try_get("sender_email").unwrap_or_default(),
         channel,
-        subject: row.get("subject"),
-        content: row.get("content"),
-        ref_code: row.get("ref_code"),
+        subject: row.try_get("subject").unwrap_or_default(),
+        content: row.try_get("content").unwrap_or_default(),
+        ref_code: row.try_get("ref_code").unwrap_or_default(),
         status,
         created_at: created_at.to_rfc3339(),
     }

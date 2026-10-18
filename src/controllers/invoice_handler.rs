@@ -12,11 +12,33 @@ use crate::{
     services::AppState,
 };
 
+fn get_id_str(row: &sqlx::postgres::PgRow) -> String {
+    if let Ok(s) = row.try_get::<String, _>("id") {
+        s
+    } else if let Ok(u) = row.try_get::<Uuid, _>("id") {
+        u.to_string()
+    } else {
+        Uuid::new_v4().to_string()
+    }
+}
+
+fn get_f64_val(row: &sqlx::postgres::PgRow, col: &str) -> f64 {
+    if let Ok(v) = row.try_get::<f64, _>(col) {
+        v
+    } else if let Ok(v) = row.try_get::<i64, _>(col) {
+        v as f64
+    } else if let Ok(v) = row.try_get::<i32, _>(col) {
+        v as f64
+    } else {
+        0.0
+    }
+}
+
 fn row_to_invoice(row: &sqlx::postgres::PgRow) -> Invoice {
-    let id_uuid: Uuid = row.get("id");
-    let invoice_number: String = row.get("invoice_number");
-    let ref_code: String = row.get("ref_code");
-    let payload_val: serde_json::Value = row.get("payload");
+    let id_str = get_id_str(row);
+    let invoice_number: String = row.try_get("invoice_number").unwrap_or_default();
+    let ref_code: String = row.try_get("ref_code").unwrap_or_default();
+    let payload_val: serde_json::Value = row.try_get("payload").unwrap_or(serde_json::Value::Null);
     let payload: InvoicePayload = serde_json::from_value(payload_val.clone()).unwrap_or_else(|_| {
         serde_json::from_value(serde_json::json!({
             "invoice_number": invoice_number,
@@ -57,17 +79,17 @@ fn row_to_invoice(row: &sqlx::postgres::PgRow) -> Invoice {
         .unwrap()
     });
 
-    let issued_at: chrono::DateTime<Utc> = row.get("issued_at");
+    let issued_at: chrono::DateTime<Utc> = row.try_get("issued_at").unwrap_or_else(|_| Utc::now());
 
     Invoice {
-        id: id_uuid.to_string(),
+        id: id_str.clone(),
         invoice_number,
         ref_type: InvoiceRefType::BuyerOrder,
-        ref_id: id_uuid.to_string(),
+        ref_id: id_str,
         ref_code,
         approved_by_admin: "Admin Operasional Ekspor PT. MEPC".to_string(),
         issued_at: issued_at.to_rfc3339(),
-        total_amount: row.get("total_amount"),
+        total_amount: get_f64_val(row, "total_amount"),
         currency: "USD".to_string(),
         payload,
     }

@@ -8,10 +8,14 @@ pub struct ServerConfig {
 
 impl Default for ServerConfig {
     fn default() -> Self {
-        Self {
-            host: "127.0.0.1".to_string(),
-            port: 8080,
-        }
+        let port = std::env::var("PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(8080);
+
+        let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+
+        Self { host, port }
     }
 }
 
