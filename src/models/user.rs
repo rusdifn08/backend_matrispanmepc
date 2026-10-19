@@ -128,19 +128,44 @@ pub struct UserProfileDto {
 impl User {
     pub fn from_row(row: &sqlx::postgres::PgRow) -> Self {
         use sqlx::Row;
+        let id = row.try_get::<Uuid, _>("id")
+            .or_else(|_| {
+                row.try_get::<&str, _>("id")
+                    .map_err(|e| sqlx::Error::Decode(Box::new(e)))
+                    .and_then(|s| Uuid::parse_str(s).map_err(|e| sqlx::Error::Decode(Box::new(e))))
+            })
+            .or_else(|_| {
+                row.try_get::<String, _>("id")
+                    .map_err(|e| sqlx::Error::Decode(Box::new(e)))
+                    .and_then(|s| Uuid::parse_str(&s).map_err(|e| sqlx::Error::Decode(Box::new(e))))
+            })
+            .unwrap_or_else(|_| Uuid::new_v4());
+
+        let nik: String = row.try_get("nik").unwrap_or_default();
+        let name: String = row.try_get("name").unwrap_or_default();
+        let email: String = row.try_get("email").unwrap_or_default();
+        let password_hash: String = row.try_get("password_hash").unwrap_or_default();
+        let role_str: String = row.try_get("role").unwrap_or_else(|_| "EXPORT_STAFF".to_string());
+        let department: String = row.try_get("department").unwrap_or_default();
+        let phone: Option<String> = row.try_get("phone").ok();
+        let is_active: bool = row.try_get("is_active").unwrap_or(true);
+        let last_login_at: Option<DateTime<Utc>> = row.try_get("last_login_at").ok();
+        let created_at: DateTime<Utc> = row.try_get("created_at").unwrap_or_else(|_| Utc::now());
+        let updated_at: DateTime<Utc> = row.try_get("updated_at").unwrap_or(created_at);
+
         Self {
-            id: Uuid::parse_str(row.get("id")).unwrap_or_else(|_| Uuid::new_v4()),
-            nik: row.get("nik"),
-            name: row.get("name"),
-            email: row.get("email"),
-            password_hash: row.get("password_hash"),
-            role: row.get::<&str, _>("role").into(),
-            department: row.get("department"),
-            phone: row.get("phone"),
-            is_active: row.get("is_active"),
-            last_login_at: row.get("last_login_at"),
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
+            id,
+            nik,
+            name,
+            email,
+            password_hash,
+            role: role_str.as_str().into(),
+            department,
+            phone,
+            is_active,
+            last_login_at,
+            created_at,
+            updated_at,
         }
     }
 }
@@ -171,6 +196,7 @@ impl From<User> for UserProfileDto {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LoginPayload {
+    #[serde(alias = "username")]
     pub identifier: String, // NIK, Email, or "admin"
     pub password: String,
 }

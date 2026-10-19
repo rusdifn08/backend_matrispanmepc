@@ -37,9 +37,9 @@ pub async fn get_current_user_handler(
 
     let row = sqlx::query(
         r#"
-        SELECT id, nik, name, email, password_hash, role, department, phone, is_active, last_login_at, created_at, updated_at
+        SELECT id, nik, name, email, password_hash, role, department, phone, is_active, last_login_at, created_at
         FROM users
-        WHERE id = $1 AND is_active = TRUE
+        WHERE id::text = $1 AND is_active = TRUE
         "#,
     )
     .bind(&claims.sub)

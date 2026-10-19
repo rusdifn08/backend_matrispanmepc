@@ -47,7 +47,7 @@ pub async fn login_handler(
     let user_row = if identifier.eq_ignore_ascii_case("admin") {
         sqlx::query(
             r#"
-            SELECT id, nik, name, email, password_hash, role, department, phone, is_active, last_login_at, created_at, updated_at
+            SELECT id, nik, name, email, password_hash, role, department, phone, is_active, last_login_at, created_at
             FROM users
             WHERE nik = 'MEPC-DIR-001' OR email = 'admin@matrispanmepc.com' OR role = 'SUPER_ADMIN'
             ORDER BY created_at ASC
@@ -59,7 +59,7 @@ pub async fn login_handler(
     } else {
         sqlx::query(
             r#"
-            SELECT id, nik, name, email, password_hash, role, department, phone, is_active, last_login_at, created_at, updated_at
+            SELECT id, nik, name, email, password_hash, role, department, phone, is_active, last_login_at, created_at
             FROM users
             WHERE LOWER(nik) = LOWER($1) OR LOWER(email) = LOWER($1)
             LIMIT 1
@@ -148,7 +148,7 @@ pub async fn login_handler(
     // 4. Successful Authentication
     state.protector.record_success(identifier).await;
 
-    let _ = sqlx::query("UPDATE users SET last_login_at = $1 WHERE id = $2")
+    let _ = sqlx::query("UPDATE users SET last_login_at = $1 WHERE id::text = $2")
         .bind(Utc::now())
         .bind(user.id.to_string())
         .execute(&state.pool)
