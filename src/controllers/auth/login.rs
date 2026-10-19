@@ -2,20 +2,65 @@ use axum::{extract::State, http::StatusCode, response::Json};
 use chrono::Utc;
 use serde_json::{json, Value};
 
-use crate::models::{AuthResponse, LoginPayload, User, UserProfileDto};
+use crate::models::{AuthResponse, User, UserProfileDto};
 use crate::services::{generate_jwt, log_security_event, verify_password, AppState};
 
 pub async fn login_handler(
     State(state): State<AppState>,
-    Json(payload): Json<LoginPayload>,
+    Json(raw_body): Json<Value>,
 ) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
-    let identifier = payload.identifier.trim();
-    if identifier.is_empty() || payload.password.is_empty() {
+    let (identifier_str, password_str) = if let Value::Object(ref map) = raw_body {
+        let id = map.get("identifier")
+            .or_else(|| map.get("username"))
+            .or_else(|| map.get("user"))
+            .or_else(|| map.get("email"))
+            .or_else(|| map.get("nik"))
+            .or_else(|| map.get("login"))
+            .or_else(|| map.get("account"))
+            .or_else(|| map.get("id"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+
+        let pw = map.get("password")
+            .or_else(|| map.get("pass"))
+            .or_else(|| map.get("kata_sandi"))
+            .or_else(|| map.get("passwd"))
+            .or_else(|| map.get("pwd"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+
+        if (id.is_empty() || pw.is_empty()) && map.len() == 2 {
+            let mut vals = Vec::new();
+            for (_, v) in map {
+                if let Some(s) = v.as_str() {
+                    vals.push(s.trim().to_string());
+                }
+            }
+            if vals.len() == 2 {
+                let final_id = if id.is_empty() { vals[0].clone() } else { id };
+                let final_pw = if pw.is_empty() { vals[1].clone() } else { pw };
+                (final_id, final_pw)
+            } else {
+                (id, pw)
+            }
+        } else {
+            (id, pw)
+        }
+    } else {
+        (String::new(), String::new())
+    };
+
+    let identifier = identifier_str.trim();
+    let password = password_str.trim();
+
+    if identifier.is_empty() || password.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({
                 "success": false,
-                "message": "NIK / Email dan Kata Sandi wajib diisi."
+                "message": "NIK / Email / Username dan Kata Sandi wajib diisi."
             })),
         ));
     }
@@ -119,8 +164,8 @@ pub async fn login_handler(
     }
 
     // 3. Password Verification (Bcrypt Blowfish Cost 10 + Fallback for admin)
-    let is_valid = verify_password(&payload.password, &user.password_hash)
-        || (identifier.eq_ignore_ascii_case("admin") && payload.password == "admin");
+    let is_valid = verify_password(password, &user.password_hash)
+        || (identifier.eq_ignore_ascii_case("admin") && password == "admin");
 
     if !is_valid {
         state.protector.record_failure(identifier).await;

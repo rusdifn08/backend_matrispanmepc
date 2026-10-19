@@ -194,21 +194,28 @@ impl From<User> for UserProfileDto {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LoginPayload {
-    #[serde(alias = "username")]
-    pub identifier: String, // NIK, Email, or "admin"
-    pub password: String,
+    #[serde(default, alias = "username", alias = "user", alias = "email", alias = "nik", alias = "login", alias = "account", alias = "id")]
+    pub identifier: Option<String>, // NIK, Email, or "admin"
+    #[serde(default, alias = "pass", alias = "kata_sandi", alias = "passwd", alias = "pwd")]
+    pub password: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterPayload {
+    #[serde(alias = "employee_id")]
     pub nik: String,
+    #[serde(alias = "full_name")]
     pub name: String,
     pub email: String,
+    #[serde(alias = "pass", alias = "kata_sandi")]
     pub password: String,
+    #[serde(default, alias = "dept", alias = "bagian")]
     pub department: String,
+    #[serde(default)]
     pub role: Option<String>,
+    #[serde(default, alias = "no_hp", alias = "telepon")]
     pub phone: Option<String>,
 }
 
