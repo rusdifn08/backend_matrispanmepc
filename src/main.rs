@@ -68,6 +68,9 @@ async fn main() {
     println!("Dashboard & Telemetry:  http://127.0.0.1:{}/dashboard", server_config.port);
     println!("REST API Documentation: http://127.0.0.1:{}/api/metrics", server_config.port);
 
+    // Launch Render Cloud Keep-Alive background worker
+    services::start_keep_alive_task(server_config.port);
+
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }

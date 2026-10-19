@@ -1,12 +1,14 @@
 pub mod auth_service;
 pub mod db;
 pub mod invoice_service;
+pub mod keep_alive;
 pub mod metrics;
 pub mod whatsapp_service;
 
 pub use auth_service::*;
 pub use db::AppState;
 pub use invoice_service::InvoiceService;
+pub use keep_alive::start_keep_alive_task;
 pub use metrics::{ApiMetrics, EndpointStat, MetricsSnapshot};
 pub use whatsapp_service::{WhatsAppService, MEPC_ADMIN_WA};
 

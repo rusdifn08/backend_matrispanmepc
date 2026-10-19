@@ -41,9 +41,10 @@ pub fn create_router(state: AppState) -> Router {
         // Executive Stats & KPIs
         .route("/api/stats", get(get_dashboard_stats))
         
-        // Telemetry & Server Metrics
-        .route("/api/metrics", get(get_api_metrics))
+        // Telemetry & Server Metrics (Served on root '/' and '/dashboard')
+        .route("/", get(get_metrics_dashboard_html))
         .route("/dashboard", get(get_metrics_dashboard_html))
+        .route("/api/metrics", get(get_api_metrics))
         
         // Enterprise Authentication & Security (RBAC + NIK)
         .route("/api/auth/login", post(login_handler))
